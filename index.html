@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Universe For You</title>
+    <!-- 引入高级字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600&family=Noto+Serif+SC:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body, html { 
+            width: 100%; height: 100%; overflow: hidden; 
+            background-color: #03030a !important; /* 强制背景为深色，防止白屏感 */
+            font-family: 'Noto Serif SC', serif; color: #fff; 
+        }
+        canvas { display: block; }
+        #text-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; transition: opacity 1s; }
+        #click-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding-bottom: 50px; }
+        .hint-text { font-size: 0.9rem; letter-spacing: 4px; color: rgba(255,255,255,0.4); animation: breathe 2s infinite ease-in-out; }
+        #main-content { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -45%); 
+            width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; 
+            z-index: 5; opacity: 0; pointer-events: none; 
+            transition: all 2s cubic-bezier(0.16, 1, 0.3, 1); 
+            background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); 
+            border-radius: 24px; padding: 40px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        }
+        .content-active { opacity: 1 !important; transform: translate(-50%, -50%) !important; pointer-events: auto !important; }
+        .title-en { font-family: 'Cinzel', serif; font-size: 2.5rem; text-align: center; margin-bottom: 5px; background: linear-gradient(120deg, #fff, #a0b0d0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .title-cn { text-align: center; font-size: 1rem; color: rgba(255,255,255,0.6); letter-spacing: 4px; margin-bottom: 30px; }
+        .media-frame { width: 100%; border-radius: 12px; overflow: hidden; margin-bottom: 30px; border: 1px solid rgba(255,255,255,0.05); }
+        .media-frame img { width: 100%; display: block; }
+        .poetry { font-size: 1.05rem; line-height: 2.2; color: rgba(255,255,255,0.85); text-align: justify; }
+        .signature { text-align: right; margin-top: 40px; font-family: 'Cinzel', serif; color: rgba(255,255,255,0.5); font-size: 0.9rem; }
+        @keyframes breathe { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 0.8; transform: translateY(-5px); } }
+    </style>
+</head>
+<body>
+    <canvas id="text-canvas"></canvas>
+    <div id="click-layer"><div class="hint-text" id="hint">点击屏幕，进入宇宙</div></div>
+    
+    <div id="main-content">
+        <h1 class="title-en">Happy Birthday</h1>
+        <div class="title-cn">致 独一无二的你</div>
+        <div class="media-frame">
+            <img src="https://images.unsplash.com/photo-1493246507139-91e8fad9978e?q=80&w=1200&auto=format&fit=crop" alt="Memory">
+        </div>
+        <div class="poetry">
+            <p>有人说，宇宙中的每一个原子，都曾是一颗恒星的心脏。</p>
+            <p>宇宙很大，但很高兴我们的坐标在过去的一年里重合过很多次。那些一起讨论过的题目、聊过的天，是很值得开心和收藏的记忆。</p>
+            <p>今天是你来到这颗星球的第20年。</p>
+            <p>愿你未来的每一天都像今天一样，有星光，有期待，也有随时可以分享快乐的朋友。生日快乐。</p>
+            <div class="signature">YOUR NAME <br> 2026.02</div>
+        </div>
+    </div>
+
+    <audio id="bgm" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" loop></audio>
+
+    <script>
+        console.log("Script starting...");
+        const canvas = document.getElementById('text-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let particles = [];
+        const phrases = ["希望美丽", "善良可爱", "的肖语欣", "永远开心", "快乐相伴"];
+        let clickCount = 0;
+
+        // 粒子类
+        class Particle {
+            constructor(isInit = false) {
+                // 确保初始化时获取到正确的宽度高度
+                const w = window.innerWidth || 1000;
+                const h = window.innerHeight || 800;
+                this.x = Math.random() * w;
+                this.y = Math.random() * h;
+                this.tx = this.x; 
+                this.ty = this.y;
+                this.vx = 0; 
+                this.vy = 0;
+                this.wanderVx = (Math.random() - 0.5) * 0.6;
+                this.wanderVy = (Math.random() - 0.5) * 0.6;
+                this.spring = 0.05 + Math.random() * 0.02;
+                this.friction = 0.88;
+                this.radius = Math.random() * 1.2 + 0.5;
+                this.mode = 'wander';
+                this.alpha = Math.random() * 0.3 + 0.1;
+            }
+            update() {
+                if (this.mode === 'wander') {
+                    this.x += this.wanderVx;
+                    this.y += this.wanderVy;
+                    if (this.x < 0 || this.x > width) this.wanderVx *= -1;
+                    if (this.y < 0 || this.y > height) this.wanderVy *= -1;
+                } else {
+                    let dx = this.tx - this.x;
+                    let dy = this.ty - this.y;
+                    this.vx += dx * this.spring;
+                    this.vy += dy * this.spring;
+                    this.vx *= this.friction;
+                    this.vy *= this.friction;
+                    this.x += this.vx;
+                    this.y += this.vy;
+                }
+            }
+            draw() {
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.mode === 'target' ? 0.8 : this.alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function init() {
+            console.log("Initializing canvas...");
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            particles = [];
+            for (let i = 0; i < 1500; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function getPixels(text) {
+            const tmp = document.createElement('canvas');
+            const tctx = tmp.getContext('2d');
+            tmp.width = width;
+            tmp.height = height;
+            let fSize = Math.min(width * 0.18, 130);
+            tctx.font = `bold ${fSize}px 'Noto Serif SC', serif`;
+            tctx.textAlign = 'center';
+            tctx.textBaseline = 'middle';
+            tctx.fillText(text, width / 2, height / 2);
+            const data = tctx.getImageData(0, 0, width, height).data;
+            const res = [];
+            const step = width < 600 ? 6 : 5;
+            for (let y = 0; y < height; y += step) {
+                for (let x = 0; x < width; x += step) {
+                    if (data[(y * width + x) * 4 + 3] > 128) res.push({x, y});
+                }
+            }
+            return res.sort(() => Math.random() - 0.5);
+        }
+
+        function flow(text) {
+            const targets = getPixels(text);
+            if (particles.length < targets.length) {
+                for(let i=0; i<targets.length-particles.length; i++) particles.push(new Particle());
+            }
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+                if (i < targets.length) {
+                    p.mode = 'target';
+                    p.tx = targets[i].x;
+                    p.ty = targets[i].y;
+                    p.vx += (Math.random() - 0.5) * 50;
+                    p.vy += (Math.random() - 0.5) * 50;
+                } else {
+                    p.mode = 'wander';
+                }
+            }
+        }
+
+        function loop() {
+            ctx.fillStyle = 'rgba(3, 3, 10, 0.3)';
+            ctx.fillRect(0, 0, width, height);
+            particles.forEach(p => { p.update(); p.draw(); });
+            requestAnimationFrame(loop);
+        }
+
+        // 立即执行初始化
+        init();
+        loop();
+
+        window.onresize = () => { if(clickCount === 0) init(); };
+
+        document.getElementById('click-layer').onclick = function() {
+            const bgm = document.getElementById('bgm');
+            if (clickCount === 0) {
+                bgm.play().catch(e => console.log("Music error:", e));
+                document.getElementById('hint').innerText = "继续点击...";
+            }
+            if (clickCount < phrases.length) {
+                flow(phrases[clickCount]);
+                clickCount++;
+            } else {
+                this.style.display = 'none';
+                particles.forEach(p => {
+                    p.mode = 'target';
+                    p.tx = p.x + (Math.random()-0.5)*2000;
+                    p.ty = p.y + (Math.random()-0.5)*2000;
+                    p.vx = (Math.random()-0.5)*150;
+                    p.vy = (Math.random()-0.5)*150;
+                });
+                setTimeout(() => {
+                    canvas.style.opacity = '0';
+                    document.getElementById('main-content').classList.add('content-active');
+                }, 600);
+            }
+        };
+    </script>
+</body>
+</html>
